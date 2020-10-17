@@ -26,7 +26,7 @@ class ged(object):
 
     def __init__(
         self,
-        model="singletrial",  # singletrial, average, regressor
+        model="singletrial",
         win_s=None,
         win_r=None,
         ch_names=None,
@@ -41,18 +41,18 @@ class ged(object):
         self.sfreq = None
         self.regularize = regularize
         self.verbose = verbose
-        self.status = None
+        self.status = status
         self.params = {}
 
         self.update_params("model", model)
         self.update_params("regularize", regularize)
 
     def update_params(self, key, value=None):
-        """[summary]
+        """Updates dictionary in instance based on key-value pair. If key exists in dictionary and value is None, that key will be removed from the dictionary.
 
         Args:
-            key ([type]): [description]
-            value ([type], optional): [description]. Defaults to None.
+            key (str): Dictionary key.
+            value (obj, optional): Value for dictionary key. Defaults to None.
         """
         if value is None and key in self.params:
             del self.params[key]
