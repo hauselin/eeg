@@ -18,7 +18,7 @@ def read_data(subject, path, ext):
 
     Args:
         subject (str): subject id
-        path (str): file directory/path 
+        path (str): directory to look for data
         ext (str): file extension (usually .mat)
 
     Raises:
@@ -43,7 +43,7 @@ def read_metadata_from_csv(subject, path):
 
     Args:
         subject (str): subject id
-        path (str): file directory/path
+        path (str): directory to look for data
 
         ValueError: If glob finds less or more than 1 matching files.
 
@@ -129,6 +129,18 @@ def cov_avg(x, win=None, ch_names=None):
 def cov_singletrial_scale(
     epochs, feature, feature_range=(1, 2), win=None, ch_names=None
 ):
+    """[summary]
+
+    Args:
+        epochs ([type]): [description]
+        feature ([type]): [description]
+        feature_range (tuple, optional): [description]. Defaults to (1, 2).
+        win ([type], optional): [description]. Defaults to None.
+        ch_names ([type], optional): [description]. Defaults to None.
+
+    Returns:
+        [type]: [description]
+    """
     regressor = minmax_scale(epochs.metadata[feature], feature_range=feature_range)
     assert regressor.shape[0] == len(epochs)
 
@@ -152,7 +164,7 @@ def cov_regularize(array, shrink=0.00):
 
     Args:
         array (np.array): symmetric covariance matrix
-        shrink (float, optional): shrinkage factor lambda. Defaults to 0.01.
+        shrink (float, optional): shrinkage factor lambda. Defaults to 0.00.
 
     Returns:
         array (np.array): Regularized covariance matrix
@@ -164,6 +176,17 @@ def cov_regularize(array, shrink=0.00):
 
 
 def sort_evals_evecs(evals, evecs, top=None, descend=True):
+    """[summary]
+
+    Args:
+        evals ([type]): [description]
+        evecs ([type]): [description]
+        top ([type], optional): [description]. Defaults to None.
+        descend (bool, optional): [description]. Defaults to True.
+
+    Returns:
+        [type]: [description]
+    """
     if descend:
         idx = evals.argsort()[::-1]
     else:
@@ -179,6 +202,11 @@ def sort_evals_evecs(evals, evecs, top=None, descend=True):
 
 
 def load_mxc_data():
+    """[summary]
+
+    Returns:
+        [type]: [description]
+    """
     # https://stackoverflow.com/questions/29360777/importing-csv-data-stored-in-a-python-module
     try:
         path = os.path.join(os.path.dirname(__file__), "data", "sampleEEGdata-epo.fif")
@@ -191,6 +219,11 @@ def load_mxc_data():
 
 
 def load_mxc_lf():
+    """[summary]
+
+    Returns:
+        [type]: [description]
+    """
     try:
         path = os.path.join(os.path.dirname(__file__), "data", "leadfield.npy")
         lf_dict = np.load(path, allow_pickle=True).item()
@@ -221,6 +254,19 @@ def load_mxc_lf():
 
 
 def topomap(data, info, axes=None, title="", cmap="viridis", contours=False, **kwargs):
+    """[summary]
+
+    Args:
+        data ([type]): [description]
+        info ([type]): [description]
+        axes ([type], optional): [description]. Defaults to None.
+        title (str, optional): [description]. Defaults to "".
+        cmap (str, optional): [description]. Defaults to "viridis".
+        contours (bool, optional): [description]. Defaults to False.
+
+    Returns:
+        [type]: [description]
+    """
     if kwargs.get("vmax") is None:
         clim = np.max(np.abs(data))
 
@@ -252,6 +298,22 @@ def colorbar(
     orientation="horizontal",
     **kwargs,
 ):
+    """[summary]
+
+    Args:
+        data ([type]): [description]
+        axes ([type]): [description]
+        position (str, optional): [description]. Defaults to "bottom".
+        size (str, optional): [description]. Defaults to "5%".
+        pad (float, optional): [description]. Defaults to 0.05.
+        multiplier ([type], optional): [description]. Defaults to 1e6.
+        cmap (str, optional): [description]. Defaults to "viridis".
+        label (str, optional): [description]. Defaults to "".
+        orientation (str, optional): [description]. Defaults to "horizontal".
+
+    Returns:
+        [type]: [description]
+    """
     cblim = np.round(np.max(np.abs(data)) * multiplier, 2)
     divider = make_axes_locatable(axes)
     cbaxes = divider.append_axes(position, size=size, pad=pad)
@@ -263,9 +325,3 @@ def colorbar(
         orientation=orientation,
         **kwargs,
     )
-
-
-# def read_designmat_EEGstruct(path):
-#     dat = loadmat(path)
-#     return dat
-

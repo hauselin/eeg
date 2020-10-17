@@ -380,12 +380,12 @@ class ged(object):
 
 
 def save_ged_model(model, path=None, filename=None):
-    """[summary]
+    """Saves GED results in ununcompressed .npz format with numpy.savez.
 
     Args:
-        model ([type]): [description]
-        path ([type], optional): [description]. Defaults to None.
-        filename ([type], optional): [description]. Defaults to None.
+        model (eeg.ged.ged): eeg.ged.ged instance
+        path (str, optional): Directory to save to. Defaults to None (current directory).
+        filename (str, optional): Filename. Defaults to None ("_unnamed_model.npz").
     """
     if filename is None:
         filename = "_unnamed_model.npz"
@@ -398,14 +398,14 @@ def save_ged_model(model, path=None, filename=None):
 
 
 def load_ged_model(path=".", filename="_unnamed_model.npz"):
-    """[summary]
+    """Read GED results saved by save_ged_model.
 
     Args:
-        path (str, optional): [description]. Defaults to ".".
-        filename (str, optional): [description]. Defaults to "_unnamed_model.npz".
+        path (str, optional): Directory to load model from. Defaults to ".".
+        filename (str, optional): Filename. Defaults to "_unnamed_model.npz".
 
     Returns:
-        [type]: [description]
+        eeg.ged.ged instance: instance of eeg.ged.ged
     """
     infile = os.path.join(path, filename)
     x = np.load(infile, allow_pickle=True)
