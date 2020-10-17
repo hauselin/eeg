@@ -511,6 +511,8 @@ def plot_ged_results(
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     if filename:
+        if path is None:
+            path = "."
         fig.savefig(os.path.join(path, filename))
 
     return fig, ax
