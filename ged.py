@@ -1,13 +1,14 @@
-import mne
-import numpy as np
-from . import utils
-from scipy import linalg
 import os
 from datetime import datetime
 from pathlib import Path
+
+import mne
+import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
-import matplotlib
+from scipy import linalg
+
+from . import utils
 
 
 class ged(object):
