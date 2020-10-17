@@ -168,6 +168,7 @@ class ged(object):
                 raise TypeError(
                     "GED still returned imaginary eigenvectors after regularization."
                 )
+        assert (not np.any(np.iscomplex(evals))) and (not np.any(np.iscomplex(evecs)))
         evals = np.real(evals)
         evecs = np.real(evecs)
 
