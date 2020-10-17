@@ -153,7 +153,8 @@ class ged(object):
 
         # perform generalized eigen decomposition
         evals, evecs = linalg.eig(covS, covR)
-        if np.any(np.iscomplex(evals)):
+        # regularize to fix imaginary values
+        if np.any(np.iscomplex(evals)) or np.any(np.iscomplex(evecs)):
             print("GED returned imaginary eigenvalues. Applying 0.01 regularization.")
             self.regularize = 0.01
             self.update_params("regularize", self.regularize)
@@ -163,7 +164,12 @@ class ged(object):
                 raise TypeError(
                     "GED still returned imaginary eigenvalues after regularization."
                 )
+            if np.any(np.iscomplex(evecs)):
+                raise TypeError(
+                    "GED still returned imaginary eigenvectors after regularization."
+                )
         evals = np.real(evals)
+        evecs = np.real(evecs)
 
         # sort eigenvalues and eigenvectors by descending eigenvalues
         evals, evecs = utils.sort_evals_evecs(evals, evecs)

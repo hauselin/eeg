@@ -8,6 +8,7 @@ import numpy.linalg as la
 import pandas as pd
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from pathlib import Path
 from scipy import linalg
 from scipy.io import loadmat
 from sklearn.preprocessing import minmax_scale
@@ -325,3 +326,21 @@ def colorbar(
         orientation=orientation,
         **kwargs,
     )
+
+
+def eeglab2mne(subject, source_path, source_ext, save_path, overwrite=True):
+    """[summary]
+
+    Args:
+        subject ([type]): [description]
+        source_path ([type]): [description]
+        source_ext ([type]): [description]
+        save_path ([type]): [description]
+        overwrite (bool, optional): [description]. Defaults to True.
+    """
+    data, source = read_data(subject, source_path, source_ext)
+    data.metadata, path = read_metadata_from_csv(subject, source_path)
+    data.info["subject_info"] = {"his_id": subject}
+    Path(save_path).mkdir(parents=True, exist_ok=True)
+    data.save(os.path.join(save_path, f"{subject}-epo.fif"), overwrite=overwrite)
+
