@@ -6,6 +6,7 @@ import mne
 import numpy as np
 import numpy.linalg as la
 import pandas as pd
+import matplotlib
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
@@ -342,5 +343,87 @@ def eeglab2mne(subject, source_path, source_ext, save_path, overwrite=True):
     data.metadata, path = read_metadata_from_csv(subject, source_path)
     data.info["subject_info"] = {"his_id": subject}
     Path(save_path).mkdir(parents=True, exist_ok=True)
-    data.save(os.path.join(save_path, f"{subject}-epo.fif"), overwrite=overwrite)
+    data.save(
+        os.path.join(save_path, f"{subject}-epo.fif"), overwrite=overwrite, fmt="double"
+    )
 
+
+def plot_tf(
+    data,
+    pick=0,
+    ax=None,
+    title=None,
+    cmap="viridis",
+    clim_scale=0.7,
+    colorbar=True,
+    ymarks=True,
+    xmarks=True,
+    aspect="auto",
+    log=True,
+    n_ticks=10,
+    fontsize=16,
+    **kwargs,
+):
+    assert isinstance(data, mne.time_frequency.tfr.AverageTFR)
+    dat = data.data[pick]  # select data for channel (np.array)
+    extent = [data.times[0], data.times[-1], data.freqs[0], data.freqs[-1]]
+    clim = np.max(np.abs(dat)) * clim_scale
+
+    fontsize_title, fontsize_ticklabels = fontsize * 1.05, fontsize * 0.8
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    cm = ax.imshow(
+        dat,
+        interpolation="gaussian",
+        cmap=cmap,
+        origin="lower",
+        vmin=-clim,
+        vmax=clim,
+        extent=extent,
+        aspect=aspect,
+    )
+
+    if log:
+        ax.set_yscale("log")
+        ax.set_yticks(
+            np.round(np.logspace(np.log10(extent[2]), np.log10(extent[3]), n_ticks), 1)
+        )
+    else:
+        ax.set_yticks(np.round(np.linspace(extent[2], extent[3], n_ticks), 1))
+
+    ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ax.get_yaxis().set_tick_params(which="minor", size=0)
+    ax.get_yaxis().set_tick_params(which="major", width=0)
+    ax.set_adjustable("box")
+    ax.tick_params(axis="x", labelsize=fontsize_ticklabels)
+    ax.tick_params(axis="y", labelsize=fontsize_ticklabels)
+
+    if colorbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.075)
+        # colorbar_format = "% 2.2f"
+        # cb = plt.colorbar(cm, cax=cax, format=colorbar_format)
+        cb = plt.colorbar(cm, cax=cax)
+        cb.outline.set_visible(False)
+        cb.ax.tick_params(labelsize=fontsize_ticklabels)
+        # for t in cb.ax.get_yticklabels():
+        #     print(t)
+        #     t.set_x(3.3)
+
+    if xmarks:
+        ax.set_xlabel("Time (s)", fontsize=fontsize)
+    else:
+        ax.set_xticklabels([])
+    if ymarks:
+        ax.set_ylabel("Frequency (Hz)", fontsize=fontsize)
+    else:
+        ax.set_yticklabels([])
+
+    if title:
+        ax.set_title(title, fontsize=fontsize_title)
+
+    plt.tight_layout()
+
+    return ax

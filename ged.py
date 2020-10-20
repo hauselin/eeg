@@ -296,6 +296,7 @@ class ged(object):
             n = self.covS_.shape[0]
         print(f"Computing component time series for {n} components/dimensions")
 
+        # evoked
         if isinstance(data, mne.Evoked):
             dat = data.copy()
         elif len(data) > 1:
@@ -306,17 +307,6 @@ class ged(object):
 
         self.comp_timeseries_ = self.evecs_[:, :n].T @ dat.data
         return {"timeseries": self.comp_timeseries_, "times": data.times}
-
-    def transform_pattern(self, data, win=None, singletrial=True, flipsign=False):
-        # copy data (Epochs or Evoked), pick channels first
-        # compute covariance matrix in window (singletrial or not)
-        # compute activation pattern
-        # flip sign if necessary
-        # return new pattern (not saved into self)
-        pass
-
-    def transform_timeseries(self, data, win, singletrial=True, flipsign=False):
-        pass
 
     def plot_eigenspectrum(self, axes=None, n=20, cmap="viridis_r", **kwargs):
         """[summary]
@@ -523,4 +513,39 @@ def plot_ged_results(
         fig.savefig(os.path.join(path, filename))
 
     return fig, ax
+
+
+def transform_pattern(model, data, win=None, singletrial=True, flipsign=False):
+    # copy data (Epochs or Evoked), pick channels first
+    # compute covariance matrix in window (singletrial or not)
+    # compute activation pattern
+    # flip sign if necessary
+    # return new pattern (not saved into self)
+    pass
+
+
+def transform_timeseries(model, data, win=None, singletrial=True, flipsign=False):
+    assert model.evecs_.shape[0] == len(data.ch_names)
+    n_comps = len(data.ch_names)
+    result = data.copy()
+    if win is not None:
+        result.crop(tmin=win[0], tmax=win[1])
+
+    if singletrial and isinstance(result, mne.Evoked):
+        raise TypeError("If singletrial=True, provide epochs instead of evoked object.")
+    elif not singletrial and isinstance(result, mne.Evoked):
+        print(f"Using model method comp_timeseries...")
+        compts = model.comp_timeseries(result, n=n_comps)
+        assert result._data.shape == compts["timeseries"].shape
+        result._data = compts["timeseries"]
+    elif singletrial and not isinstance(result, mne.Evoked):
+        # ensure we have epochs, which are 3D (epochs_chan_time)
+        assert len(result._data.shape) == 3
+        print(f"Computing component time-series for {len(result)} epochs.")
+        for e in range(len(result)):
+            result._data[e] = model.evecs_.T @ result._data[e]
+    else:
+        raise Exception("Check parameters.")
+
+    return result
 
