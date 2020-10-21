@@ -77,12 +77,13 @@ def cov_singletrial(epochs, win=None, ch_names=None):
 
     Args:
         epochs (mne.Epochs): mne.Epochs instance
-        win (list, optional): Time window to subset or crop. Defaults to None.
-        ch_names (list, optional): Channels to subset. Defaults to None.
+        win (tuple, optional): Time window to subset or crop. Defaults to None.
+        ch_names (tuple, optional): Channels to subset. Defaults to None.
 
     Returns:
         An array object: channel by channel covariance  
     """
+    assert len(epochs.get_data().shape) == 3
 
     if win is None:
         win = [epochs.times[0], epochs.times[-1]]
@@ -115,9 +116,9 @@ def cov_avg(x, win=None, ch_names=None):
     if ch_names is None:
         ch_names = x.ch_names
 
-    if isinstance(x, mne.Evoked):
+    if isinstance(x, mne.Evoked) or isinstance(x, mne.EvokedArray):
         dat = x.copy()
-    elif len(x) > 1:
+    elif len(x) > 1:  # not epochs instance, we can average it
         dat = x.copy().average()
     else:
         raise TypeError("Only Epochs or Evoked objects are allowed")
@@ -355,19 +356,26 @@ def plot_tf(
     pick=0,
     ax=None,
     title=None,
-    cmap="viridis",
+    log=True,
+    ylim=None,  # tuple (1, 4)
+    xlim=None,  # tuple(0.1, 0.2)
     clim=None,  # tuple (0, 1.0)
     clim_scale=0.7,
     colorbar=True,
     ymarks=True,
     xmarks=True,
+    cmap="viridis",
     aspect="auto",
-    log=True,
+    interpolation="gaussian",
     n_ticks=10,
     fontsize=16,
     **kwargs,
 ):
     assert isinstance(data, mne.time_frequency.tfr.AverageTFR)
+    if ylim is not None:
+        data = data.copy().crop(fmin=ylim[0], fmax=ylim[-1])
+    if xlim is not None:
+        data = data.copy().crop(*xlim)
     dat = data.data[pick]  # select data for channel (np.array)
     extent = [data.times[0], data.times[-1], data.freqs[0], data.freqs[-1]]
     if clim is None:  # set colorbar limits to 0.7 * max value (suggested by Mike)
@@ -381,7 +389,7 @@ def plot_tf(
 
     cm = ax.imshow(
         dat,
-        interpolation="gaussian",
+        interpolation=interpolation,
         cmap=cmap,
         origin="lower",
         vmin=clim[0],
@@ -390,11 +398,15 @@ def plot_tf(
         aspect=aspect,
     )
 
+    n_ticks = np.int32(np.min([n_ticks, extent[3] - extent[2] + 1]))
     if log:
         ax.set_yscale("log")
+        ax.set_yticklabels([])
         ax.set_yticks(
             np.round(np.logspace(np.log10(extent[2]), np.log10(extent[3]), n_ticks), 1)
         )
+        # https://stackoverflow.com/questions/10781077/how-to-disable-the-minor-ticks-of-log-plot-in-matplotlib
+        ax.minorticks_off()
     else:
         ax.set_yticks(np.round(np.linspace(extent[2], extent[3], n_ticks), 1))
 
@@ -434,12 +446,12 @@ def plot_tf(
     return ax
 
 
-def tf_avg_freq(data, frange, array=False, keepdims=False):
+def tf_avg_freq(data, frange=None, array=False, keepdims=False):
     """Average across multiple frequencies in EpochsTFR or averageTFR. Collapses the frequency dimension to a singleton dimension so the result is like a filtered ERP/EEG time-series.
 
     Args:
         data (EpochsTFR, averageTFR): mne's EpochsTFR or averageTFR.
-        frange (tuple, list): Frequency window min and max values, (fmin, fmax).
+        frange (tuple, list): Frequency window min and max values, (fmin, fmax). Defaults to None, which averages across all frequencies.
         array (bool, optional): Whether to return the raw data as a numpy.array or as mne object. Defaults to False
         keepdims (bool, optional): Whether to keep or remove the singleton dimension after averaging. Defaults to False.
 
@@ -447,14 +459,17 @@ def tf_avg_freq(data, frange, array=False, keepdims=False):
         TypeError: If data isn't an instance of EpochsTFR or averageTFR.
 
     Returns:
-        numpy.array: N-dimensional numpy array (e.g., epochs_channels_times)
+        numpy.array, mne.EpochsArray, or mne.EvokedArray: if array=True, N-dimensional numpy array (e.g., epochs_channels_times); if array=False, mne.EpochsArray or mne.EvokedArray 
     """
+    # which axis to collapse/average over (evoked objects don't have epochs dimension)
     if isinstance(data, mne.time_frequency.tfr.EpochsTFR):
         axis = 2
     elif isinstance(data, mne.time_frequency.tfr.AverageTFR):
         axis = 1
     else:
         raise TypeError("data must be EpochsTFR or AverageTFR")
+    if frange is None:
+        frange = (data.freqs[0], data.freqs[-1])
     freq_mean = np.mean(frange)
 
     dat = data.copy().crop(fmin=frange[0], fmax=frange[1])
@@ -481,4 +496,66 @@ def tf_avg_freq(data, frange, array=False, keepdims=False):
             )
 
     return out
+
+
+def get_subject_comp_idx(subjects_dict, key):
+    out = [subjects_dict[s][key] for s in subjects_dict.keys()]
+    assert len(out) == len(subjects_dict.keys())
+    return out
+
+
+def rename_chan(data, new_name="Fp1"):
+    assert len(data.info.ch_names) == 1
+    old_name = data.info.ch_names[0]
+    mne.channels.rename_channels(data.info, {old_name: new_name})
+    print(f"Rename from {old_name} to {new_name}")
+    return data
+
+
+def hey():
+    print("hi huase")
+
+
+def avg_time(data, trange):
+    """Averages across time to turn the time dimension into a singleton.
+
+    Args:
+        data ([type]): [description]
+        trange ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
+    # assert isinstance(data, mne.EpochsArray)
+    # TODO axis must change depending on data type
+    mean_time = np.mean(trange)
+    dat = data.copy().crop(*trange)
+    dat.crop(*trange)
+    dat_array = np.mean(dat._data, axis=2, keepdims=True)
+    dat.crop(mean_time, mean_time)
+    dat._data = dat_array
+    return dat
+
+
+def epochs_to_pd(epochs, metadata=True, concat=True):
+    df_all = []
+    for e in epochs:
+        df = e.copy().to_data_frame(time_format=None, long_format=True)
+        del df["condition"]
+        if metadata:
+            md = e.metadata
+            md["epoch"] = np.arange(len(e))
+            df = pd.merge(df, md, how="left", on="epoch")
+        else:
+            df["subject"] = e.info["subject_info"]["his_id"]
+        df_all.append(df)
+    if concat:
+        df_all = pd.concat(df_all, ignore_index=True)
+    return df_all
+
+
+def subplotgrid(n):
+    rows = np.ceil(n / np.ceil(np.sqrt(n)))
+    cols = np.ceil(np.sqrt(n))
+    return int(rows), int(cols)
 

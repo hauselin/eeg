@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from pathlib import Path
+import copy
 
 import mne
 import numpy as np
@@ -227,6 +228,14 @@ class ged(object):
         return {"timeseries": ts, "times": times}
 
     def get_comp(self, index):
+        """[summary]
+
+        Args:
+            index ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
         pattern = self.get_pattern(index)
         ts = self.get_timeseries(index)
         return {
@@ -287,7 +296,7 @@ class ged(object):
             n (int, optional): Number of components' timeseries to compute. Defaults to 10.
 
         Raises:
-            TypeError: If data isn't an instance of mne.Epochs or mne.Evoked
+            TypeError: If data isn't an instance of mne.Epochs or mne.Evoked.
 
         Returns:
             dict: Dictionary with timeseries and times.
@@ -398,7 +407,7 @@ def load_ged_model(path=".", filename="_unnamed_model.npz"):
     """Read GED results saved by save_ged_model.
 
     Args:
-        path (str, optional): Directory to load model from. Defaults to ".".
+        path (str, optional): Directory to load model from. Defaults to current directory.
         filename (str, optional): Filename. Defaults to "_unnamed_model.npz".
 
     Returns:
@@ -415,7 +424,7 @@ def load_ged_model(path=".", filename="_unnamed_model.npz"):
 
 def plot_ged_results(
     model,
-    comps2plot=5,
+    comps2plot=(0, 1, 2, 3, 4, 5),
     nrows=3,
     cmap="viridis",
     path=None,
@@ -427,35 +436,37 @@ def plot_ged_results(
 
     Args:
         model ([type]): [description]
-        comps2plot (int, optional): [description]. Defaults to 5.
+        comps2plot (tuple, optional): [description]. Defaults to (0, 1, 2, 3, 4, 5).
         nrows (int, optional): [description]. Defaults to 3.
-        cmap (str, optional): [description]. Defaults to "viridis".
+        cmap (str, optional): Colormap. Defaults to "viridis".
         path ([type], optional): [description]. Defaults to None.
         filename ([type], optional): [description]. Defaults to None.
         figsize (tuple, optional): [description]. Defaults to (34, 13).
         fontsize (int, optional): [description]. Defaults to 15.
 
     Returns:
-        [type]: [description]
+        Figure, Axes: Instance of matplotlib Figure and Axes
     """
 
-    if comps2plot < 3:
-        comps2plot = 3
+    if isinstance(comps2plot, int) or len(comps2plot) < 3:
+        raise ValueError(
+            "comps2plot must be tuple with length greater than 3, e.g., (0, 1, 2)"
+        )
 
-    fig, ax = plt.subplots(nrows, comps2plot, figsize=figsize)
+    fig, ax = plt.subplots(nrows, len(comps2plot), figsize=figsize)
     # plt.get_current_fig_manager().window.showMaximized()  # maximize figure
 
     # plot eigenvalue spectrum/screeplot (top left)
     cax = ax[0, 0]
-    model.plot_eigenspectrum(cax, cmap=cmap + "_r", n=40)
+    model.plot_eigenspectrum(cax, cmap=cmap + "_r", n=model.evecs_.shape[0])
 
     # plot component activation patterns (second row)
     ax_array = ax[1, :]
     for idx, cax in enumerate(ax_array):
-        dat2plot = model.get_pattern(idx)
+        dat2plot = model.get_pattern(comps2plot[idx])
         utils.topomap(dat2plot, model.get_params("info"), cmap=cmap, axes=cax)
         utils.colorbar(dat2plot, cax, multiplier=1e10, cmap=cmap)
-        cax.set_title(f"Component {idx}", size=fontsize)
+        cax.set_title(f"Component {comps2plot[idx]}", size=fontsize)
         if idx == 0:
             cax.set(ylabel=f'S win: {model.get_params("win_s")}')
 
@@ -467,7 +478,7 @@ def plot_ged_results(
     tmax = np.max(timewins)
     ax_array = ax[2, :]
     for idx, cax in enumerate(ax_array):
-        dat2plot = model.get_comp(idx)
+        dat2plot = model.get_comp(comps2plot[idx])
         idx2plot = np.where(
             (dat2plot.get("times") >= tmin) & (dat2plot.get("times") <= tmax)
         )
@@ -516,15 +527,63 @@ def plot_ged_results(
 
 
 def transform_pattern(model, data, win=None, singletrial=True, flipsign=False):
-    # copy data (Epochs or Evoked), pick channels first
-    # compute covariance matrix in window (singletrial or not)
-    # compute activation pattern
-    # flip sign if necessary
-    # return new pattern (not saved into self)
-    pass
+    """[summary]
+
+    Args:
+        model ([type]): [description]
+        data ([type]): [description]
+        win ([type], optional): [description]. Defaults to None.
+        singletrial (bool, optional): [description]. Defaults to True.
+        flipsign (bool, optional): [description]. Defaults to False.
+
+    Raises:
+        Exception: [description]
+
+    Returns:
+        [type]: [description]
+    """
+    if model.evecs_.shape[0] != len(data.info["ch_names"]):
+        raise Exception("model and data must have same channels")
+    if singletrial:
+        assert len(data.get_data().shape) == 3
+
+    if win is None:
+        win = (data.times[0], data.times[-1])
+    data = data.copy().crop(*win)
+
+    if singletrial:
+        print("Single-trial covariance")
+        covS = utils.cov_singletrial(data)
+    else:
+        print("Average covariance")
+        covS = utils.cov_avg(data)
+
+    # transform pattern
+    out = copy.deepcopy(model)
+    out.covS_ = covS
+    out.comp_pattern()
+    out.update_params("covS_new_win", win)
+
+    return out
 
 
 def transform_timeseries(model, data, win=None, singletrial=True, flipsign=False):
+    """[summary]
+
+    Args:
+        model ([type]): [description]
+        data ([type]): [description]
+        win ([type], optional): [description]. Defaults to None.
+        singletrial (bool, optional): [description]. Defaults to True.
+        flipsign (bool, optional): [description]. Defaults to False.
+
+    Raises:
+        TypeError: [description]
+        Exception: [description]
+
+    Returns:
+        [type]: [description]
+    """
     assert model.evecs_.shape[0] == len(data.ch_names)
     n_comps = len(data.ch_names)
     result = data.copy()
@@ -548,4 +607,49 @@ def transform_timeseries(model, data, win=None, singletrial=True, flipsign=False
         raise Exception("Check parameters.")
 
     return result
+
+
+def select_comp(models, comps_idx, grd_avg=True):
+    """For each ged instance in models, select the corresponding component in comps_idx. For exampmle, if [ged1, ged2, ged3] and [0, 2, 1], select components 0, 2, 1 from ged1, ged2, and ged respectively.
+
+    Args:
+        models (list): list of ged instances
+        comps_idx (list): list of component indices
+        grd_avg (bool, optional): Whether to also compute the grand average. Defaults to True.
+
+    Returns:
+        [type]: Ret
+    """
+    if len(comps_idx) == 1:
+        comps_idx *= len(models)
+    assert len(models) == len(comps_idx)
+    print(f"Selecting component from each subject: {comps_idx}")
+
+    # get pattern and timeseries for each subject
+    pattern_list = []
+    timeseries_list = []
+    times_list = []
+    for i, m in enumerate(models):
+        temp_comp = m.get_comp(comps_idx[i])
+        pattern_list.append(temp_comp["pattern"])
+        timeseries_list.append(temp_comp["timeseries"])
+        times_list.append(temp_comp["times"])
+    pattern_array = np.array(pattern_list)
+    timeseries_array = np.array(timeseries_list)
+    times_array = np.array(times_list)
+    out = {
+        "subj_comp": comps_idx,
+        "pattern": pattern_array,
+        "timeseries": timeseries_array,
+        "times": times_array,
+    }
+    if grd_avg:
+        out["pattern_grdavg"] = np.mean(pattern_array, axis=0)
+        out["timeseries_grdavg"] = np.mean(timeseries_array, axis=0)
+        out["times_grdavg"] = np.mean(times_array, axis=0)
+
+    out["info"] = m.info
+    out["info"]["subject_info"] = {}
+
+    return out
 
