@@ -204,19 +204,21 @@ def sort_evals_evecs(evals, evecs, top=None, descend=True):
 
 
 def load_mxc_data():
-    """[summary]
+    """Load sample EEG data provided by Mike X Cohen.
 
     Returns:
-        [type]: [description]
+        mne.Epochs: mne.Epochs instance
     """
     # https://stackoverflow.com/questions/29360777/importing-csv-data-stored-in-a-python-module
     try:
-        path = os.path.join(os.path.dirname(__file__), "data", "sampleEEGdata-epo.fif")
-        print("Loading sampleEEGdata-epo.fif")
+        fname = "sampleEEGdata-epo.fif"
+        print(f"Loading {fname}")
+        path = os.path.join(os.path.dirname(__file__), "data", fname)
         return mne.read_epochs(path)
     except:
-        path = os.path.join(os.path.dirname(__file__), "data", "sampleEEGdata.mat")
-        print("Loading sampleEEGdata.mat")
+        fname = "sampleEEGdata.mat"
+        print(f"Loading {fname}")
+        path = os.path.join(os.path.dirname(__file__), "data", fname)
         return mne.io.read_epochs_eeglab(path)
 
 
