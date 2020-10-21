@@ -354,6 +354,7 @@ def plot_tf(
     ax=None,
     title=None,
     cmap="viridis",
+    clim=None,  # tuple (0, 1.0)
     clim_scale=0.7,
     colorbar=True,
     ymarks=True,
@@ -367,7 +368,9 @@ def plot_tf(
     assert isinstance(data, mne.time_frequency.tfr.AverageTFR)
     dat = data.data[pick]  # select data for channel (np.array)
     extent = [data.times[0], data.times[-1], data.freqs[0], data.freqs[-1]]
-    clim = np.max(np.abs(dat)) * clim_scale
+    if clim is None:  # set colorbar limits to 0.7 * max value (suggested by Mike)
+        maxval = np.max(np.abs(dat))
+        clim = (-maxval * clim_scale, maxval * clim_scale)
 
     fontsize_title, fontsize_ticklabels = fontsize * 1.05, fontsize * 0.8
 
@@ -379,8 +382,8 @@ def plot_tf(
         interpolation="gaussian",
         cmap=cmap,
         origin="lower",
-        vmin=-clim,
-        vmax=clim,
+        vmin=clim[0],
+        vmax=clim[1],
         extent=extent,
         aspect=aspect,
     )
@@ -427,3 +430,45 @@ def plot_tf(
     plt.tight_layout()
 
     return ax
+
+
+def tf_avg_freq(data, frange, keepdims=False):
+    """Average across multiple frequencies in EpochsTFR or averageTFR.
+
+    Args:
+        data (EpochsTFR, averageTFR): mne's EpochsTFR or averageTFR.
+        frange (tuple, list): Frequency window min and max values.
+        keepdims (bool, optional): Whether to keep or remove the singleton dimension after averaging. Defaults to False.
+
+    Raises:
+        TypeError: If data isn't an instance of EpochsTFR or averageTFR.
+
+    Returns:
+        numpy.array: N-dimensional numpy array (e.g., epochs_channels_frequencies_times)
+    """
+    if isinstance(data, mne.time_frequency.tfr.EpochsTFR):
+        axis = 2
+    elif isinstance(data, mne.time_frequency.tfr.AverageTFR):
+        axis = 1
+    else:
+        raise TypeError("data must be EpochsTFR or AverageTFR")
+
+    dat = data.copy().crop(fmin=frange[0], fmax=frange[1])
+    out = np.mean(dat.data, axis=axis, keepdims=keepdims)
+    print(f"Frequencies: {dat.freqs}")
+    print(f"Mean frequency: {np.mean(dat.freqs)}")
+    print(f"Input data dimensions: {dat.data.shape}")
+    print(f"Output data dimensions: {out.shape}")
+
+    return out
+
+
+def tf_avg_freq_epoch(data, frange, keepdims=False):
+    array = tf_avg_freq(data, frange, keepdims)
+    # https://mne.tools/stable/auto_examples/io/plot_objects_from_arrays.html
+    epoch = mne.EpochsArray(
+        array, info=data.info, metadata=data.metadata, tmin=data.times[0]
+    )
+    epoch.metadata["freq"] = np.mean(frange)
+    return epoch
+
