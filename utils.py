@@ -1,12 +1,14 @@
 import datetime
 import glob
 import os
+import copy
 
 import mne
 import numpy as np
 import numpy.linalg as la
 import pandas as pd
 import matplotlib
+from collections import namedtuple
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
@@ -512,10 +514,6 @@ def rename_chan(data, new_name="Fp1"):
     return data
 
 
-def hey():
-    print("hi huase")
-
-
 def avg_time(data, trange):
     """Averages across time to turn the time dimension into a singleton.
 
@@ -538,6 +536,16 @@ def avg_time(data, trange):
 
 
 def epochs_to_pd(epochs, metadata=True, concat=True):
+    """Save values from each epoch to pandas.DataFrame.
+
+    Args:
+        epochs (list): List containing mne epoch objects.
+        metadata (bool, optional): Whether to . Defaults to True.
+        concat (bool, optional): . Defaults to True.
+
+    Returns:
+        pandas.DataFrame or list of pandas.DataFrame: If concat=True, returns one pandas.DataFrame; else returns a list of pandas.DataFrame.
+    """
     df_all = []
     for e in epochs:
         df = e.copy().to_data_frame(time_format=None, long_format=True)
@@ -555,7 +563,138 @@ def epochs_to_pd(epochs, metadata=True, concat=True):
 
 
 def subplotgrid(n):
+    """Determines the number of rows and columns required for subplots that will make figure resemble as square as much as possible.
+
+    Args:
+        n (str): No. of subplots in total.
+
+    Returns:
+        tuple: (rows, columns)
+    """
     rows = np.ceil(n / np.ceil(np.sqrt(n)))
     cols = np.ceil(np.sqrt(n))
     return int(rows), int(cols)
 
+
+def save_regression(results, fname):
+    """Save results from mne's linear_regression.
+
+    Args:
+        results (dict): Dictionary of collections.namedtuple.
+        fname (str): Filename.
+    """
+    k = list(results.keys())
+    np.savez(fname, **results)
+
+
+def load_regression(fname):
+    """Load saved regression results from mne's linear_regression.
+
+    Args:
+        fname (str): Path and filename.
+
+    Returns:
+        dict of collections.namedtuple: Dictionary with keys for each regressor. Each value is a namedtuple with the following attributes: beta, stderr, t_val, p_val, mlog10_p_val
+
+    Notes:
+        For more information, see https://mne.tools/stable/generated/mne.stats.linear_regression.html#mne.stats.linear_regression
+    """
+    dat = np.load(fname, allow_pickle=True)
+    regressors = dict(dat).keys()
+    d = {}
+    lm = namedtuple("lm", "beta stderr t_val p_val mlog10_p_val")
+    for r in regressors:
+        d[r] = lm(*dat[r])
+    return d
+
+
+def load_regressions(path, subjects):
+    models = []
+    for s in subjects:
+        fname = glob.glob(os.path.join(path, f"*{s}*.npz"))[0]
+        print(f"Loading {fname}")
+        m = load_regression(fname)
+        models.append(m)
+    return models
+
+
+def create_dict_str(subjs, keys=20):
+    string = "subjects = {"
+    for s in subjs:
+        string += f"'{s}': "
+        string += "{"
+        for k in range(keys):
+            string += f"'condition_{k}': -1, "
+        string += "},"
+    string = string[:-1]
+    string += "}"
+    print(string)
+
+
+def peak_time_val(data, times):
+    """[summary]
+
+    Args:
+        data ([type]): [description]
+        times ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
+    data = data.reshape(-1)
+    times = times.reshape(-1)
+    assert data.shape[0] == times.shape[0]
+    min_idx = data.argsort()[0]
+    max_idx = data.argsort()[-1]
+    print("min time, max time, min value, max value, min index, max index")
+    return (
+        times[min_idx],
+        times[max_idx],
+        data[min_idx],
+        data[max_idx],
+        min_idx,
+        max_idx,
+    )
+
+
+def evokeds_to_epoch(evokeds):
+    dat = []
+    subj = []
+    for e in evokeds:
+        dat.append(e.data)
+        subj.append(e.info["subject_info"]["his_id"])
+
+    dat = np.array(dat)
+    epoch = mne.EpochsArray(dat, evokeds[0].info, tmin=evokeds[0].times[0])
+    epoch.metadata = pd.DataFrame(subj, columns=["subject"])
+    return epoch
+
+
+def pick_from_linreg(models, idx):
+    """Pick GED component or channel from each model (output from linear_regression).
+
+    Args:
+        models ([type]): [description]
+        idx ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
+    results = copy.deepcopy(models)
+    for r, i in zip(results, idx):  # for each model/subject/object
+        print(f"Picking {i}")
+        for k in r.keys():
+            r[k].beta.pick([i])
+            beta = rename_chan(r[k].beta)
+            r[k].stderr.pick([i])
+            stderr = rename_chan(r[k].stderr)
+            r[k].t_val.pick([i])
+            t_val = rename_chan(r[k].t_val)
+            r[k].p_val.pick([i])
+            p_val = rename_chan(r[k].p_val)
+            r[k].mlog10_p_val.pick([i])
+            mlog10_p_val = rename_chan(r[k].mlog10_p_val)
+            lm = namedtuple("lm", "beta stderr t_val p_val mlog10_p_val")
+            r[k] = lm(beta, stderr, t_val, p_val, mlog10_p_val)
+
+    return results

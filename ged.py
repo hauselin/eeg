@@ -1,4 +1,5 @@
 import os
+import glob
 from datetime import datetime
 from pathlib import Path
 import copy
@@ -416,10 +417,26 @@ def load_ged_model(path=".", filename="_unnamed_model.npz"):
     infile = os.path.join(path, filename)
     x = np.load(infile, allow_pickle=True)
     model = x["model"].item()
-    # model = ged()  # create empty model
-    # model.params = x['params'].item()  # update parameters
-    # model.covS_ = x['covS_']
     return model
+
+
+def load_ged_models(path, subjects):
+    """Load all ged models in .npz files in path/directory.
+
+    Args:
+        path (str): Location/path of all models (.npz files).
+
+    Returns:
+        list: list containing all models
+    """
+    models = []
+    for s in subjects:
+        fname = glob.glob(os.path.join(path, f"*{s}*.npz"))[0]
+        fname = fname[(len(path) + 1) :]
+        print(f"Loading {fname}")
+        m = load_ged_model(path, fname)
+        models.append(m)
+    return models
 
 
 def plot_ged_results(
@@ -609,47 +626,82 @@ def transform_timeseries(model, data, win=None, singletrial=True, flipsign=False
     return result
 
 
-def select_comp(models, comps_idx, grd_avg=True):
-    """For each ged instance in models, select the corresponding component in comps_idx. For exampmle, if [ged1, ged2, ged3] and [0, 2, 1], select components 0, 2, 1 from ged1, ged2, and ged respectively.
+def select_comp(models, comps_idx):
+    """Select components for different subjects. For each ged instance in models, select the corresponding component in comps_idx. For exampmle, if [ged1, ged2, ged3] and [0, 2, 1], select components 0, 2, 1 from ged1, ged2, and ged respectively. 
 
     Args:
         models (list): list of ged instances
         comps_idx (list): list of component indices
-        grd_avg (bool, optional): Whether to also compute the grand average. Defaults to True.
 
     Returns:
-        [type]: Ret
+        : TODO 
     """
     if len(comps_idx) == 1:
         comps_idx *= len(models)
-    assert len(models) == len(comps_idx)
+    else:
+        assert len(models) == len(comps_idx)
     print(f"Selecting component from each subject: {comps_idx}")
+    check = {}
 
     # get pattern and timeseries for each subject
-    pattern_list = []
-    timeseries_list = []
-    times_list = []
+    evoked_ts = []
+    evoked_pattern = []
+    inf = models[0].info
+
+    info_ts = mne.create_info(ch_names=["C1"], sfreq=inf["sfreq"], ch_types=["eeg"])
+    info_pat = inf
     for i, m in enumerate(models):
         temp_comp = m.get_comp(comps_idx[i])
-        pattern_list.append(temp_comp["pattern"])
-        timeseries_list.append(temp_comp["timeseries"])
-        times_list.append(temp_comp["times"])
-    pattern_array = np.array(pattern_list)
-    timeseries_array = np.array(timeseries_list)
-    times_array = np.array(times_list)
-    out = {
-        "subj_comp": comps_idx,
-        "pattern": pattern_array,
-        "timeseries": timeseries_array,
-        "times": times_array,
-    }
-    if grd_avg:
-        out["pattern_grdavg"] = np.mean(pattern_array, axis=0)
-        out["timeseries_grdavg"] = np.mean(timeseries_array, axis=0)
-        out["times_grdavg"] = np.mean(times_array, axis=0)
+        temp_times = temp_comp["times"]
+        temp_ts = temp_comp["timeseries"].reshape(1, -1)
+        # timeseries in evoked array
+        e_ts = mne.EvokedArray(
+            temp_ts,
+            info=info_ts,
+            tmin=temp_times[0],
+            comment=f"Comp {comps_idx[i]}",
+            nave=1,
+        )
+        e_ts.info["subject_info"] = {}
+        e_ts.info["subject_info"]["his_id"] = m.info["subject_info"]["his_id"]
+        evoked_ts.append(e_ts)
 
-    out["info"] = m.info
-    out["info"]["subject_info"] = {}
+        # pattern in evoked array
+        temp_pat = temp_comp["pattern"].reshape(-1, 1)
+        e_pat = mne.EvokedArray(
+            temp_pat,
+            info=info_pat,
+            tmin=np.mean(m.get_params("win_s")),
+            comment=f"Comp {comps_idx[i]} Swin: {m.get_params('win_s')}",
+            nave=1,
+        )
+        evoked_pattern.append(e_pat)
 
-    return out
+        # check
+        check[m.info["subject_info"]["his_id"]] = comps_idx[i]
 
+    print(check)
+    return evoked_ts, evoked_pattern
+
+
+def plot_subj_comp(path, subj, comp_idx):
+    """Plots the component pattern and time series for a subject. Subject model is loaded from path. Generally used for inspecting components.
+
+    Args:
+        path (str): Location/path of all .npz models.
+        subj (str): Subject ID or filename.
+        comp_idx (int): Component index to plot
+
+    Returns:
+        figure, axes, model: matplotlib figure, list of axes, ged instance
+    """
+    fpath = glob.glob(os.path.join(path, f"*{subj}*.npz"))
+    assert len(fpath) == 1
+    fname = fpath[0][(len(path) + 1) :]
+    print(f"Loading {fname}")
+    model = load_ged_model(path, fname)
+    f, a = model.plot_component(comp_idx)
+    txt = a[0].title.get_text()
+    a[0].title.set_text(f"{subj}\n" + txt)
+    f.tight_layout()
+    return f, a, model
