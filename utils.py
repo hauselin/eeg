@@ -6,6 +6,7 @@ import copy
 import mne
 import numpy as np
 import numpy.linalg as la
+import scipy
 import pandas as pd
 import matplotlib
 from collections import namedtuple
@@ -13,6 +14,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
 from scipy import linalg
+from scipy.stats import t
 from scipy.io import loadmat
 from sklearn.preprocessing import minmax_scale
 
@@ -698,3 +700,113 @@ def pick_from_linreg(models, idx):
             r[k] = lm(beta, stderr, t_val, p_val, mlog10_p_val)
 
     return results
+
+
+def cut(data, feature, bin=5):
+    df = data.metadata
+    feature_new = feature + "_bin"
+    df[feature_new] = pd.cut(df[feature], bin, labels=False) / (bin - 1)
+    df["intercept"] = 1
+    data.metadata = df  # modify data in-place
+    colors = {str(val): val for val in data.metadata[feature_new].unique()}
+    evokeds = {val: data[f"{feature_new} == {val}"].average() for val in colors}
+    return evokeds, colors
+
+
+def load_evokeds(fname, labels=None):
+    dat = np.load(fname, allow_pickle=True)
+    out = {}
+    assert isinstance(labels, str) or labels is None
+    if not labels:
+        labels = None
+    keys = []
+    for val in dat:
+        keys.append(val)
+        if val == labels:
+            labels = dat[val].item()
+        else:
+            out[val] = dat[val].item()
+    print(f"All available keys: {keys}")
+    print(f"Evokeds keys: {out.keys()}")
+    print(f"Keys: {labels}")
+    return out, labels
+
+
+def combine_dict_evokeds(evokeds, grdavg=True):
+    assert isinstance(evokeds, list)
+    keys = evokeds[0].keys()
+    out = {k: [] for k in keys}
+    # check if all keys are the same
+    for i, evokeds_dict in enumerate(evokeds):
+        if evokeds_dict.keys() != keys:
+            raise ValueError(f"Dictionary keys don't match for index {i}")
+
+    for evokeds_dict in evokeds:
+        for k in evokeds_dict.keys():
+            out[k].append(evokeds_dict[k])
+
+    if grdavg:
+        print("Grand averaging...")
+        for k in out:
+            out[k] = mne.grand_average(out[k])
+
+    return out
+
+
+def regress(data, features, return_p=False):
+    """Perform regression for whole multidimensional data space. 
+
+    Args:
+        data (numpy.array): Data to perform regression on. First dimension represents observations
+        (for example trials or subjects). Numpy array of shape (observations, ...)
+        features (numpy.array): umpy array of shape (observations, features)
+        return_p (bool, optional): Return p-values. Defaults to False.
+
+    Returns:
+        tuple: coefficients, t-statistics, standard errors, p-values (if return_p is True)
+
+    Notes:
+        Code adapted from Mikołaj Magnuski, https://github.com/mmagnuski/borsar/blob/master/borsar/stats.py
+    """
+    n_obs = data.shape[0]
+    features = add_intercept(features)
+
+    n_features = features.shape[1]
+    assert n_obs == features.shape[0], (
+        "features must have the same number of rows"
+        " as the size of first data dimension (observations)."
+    )
+
+    df = n_obs - n_features
+    original_shape = data.shape
+    # reshape to 2D matrix (observation, value)
+    data = data.reshape((original_shape[0], np.prod(original_shape[1:])))
+    # perform regression
+    coefs, _, _, _ = scipy.linalg.lstsq(features, data)
+    prediction = (features[:, :, np.newaxis] * coefs[np.newaxis, :]).sum(axis=1)
+    MSE = ((data - prediction) ** 2).sum(axis=0, keepdims=True) / df
+    SE = np.sqrt(MSE * np.diag(np.linalg.pinv(features.T @ features))[:, np.newaxis])
+
+    # reshape back to original space
+    t_vals = (coefs / SE).reshape([n_features, *original_shape[1:]])
+    coefs = coefs.reshape([n_features, *original_shape[1:]])
+    SE = SE.reshape([n_features, *original_shape[1:]])
+    p_vals = None
+
+    if return_p:
+        p_vals = t.cdf(-np.abs(t_vals), df) * 2.0
+
+    return coefs, t_vals, SE, p_vals
+
+
+def add_intercept(features):
+    assert features.ndim < 3, "`features` must be 1d or 2d array."
+    if features.ndim == 1:
+        features = np.atleast_2d(features).T
+
+    # add constant term
+    if not (features[:, 0] == 1).all():
+        n_obs = features.shape[0]
+        features = np.concatenate([np.ones((n_obs, 1)), features], axis=1)
+
+    return features
