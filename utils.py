@@ -167,7 +167,7 @@ def cov_singletrial_scale(
 
 
 def cov_regularize(array, shrink=0.00):
-    """Apply shrinkage regularization to a symmetric covariance matrix
+    """Apply shrinkage regularization to a symmetric covariance matrix.
 
     Args:
         array (np.array): symmetric covariance matrix
@@ -176,10 +176,18 @@ def cov_regularize(array, shrink=0.00):
     Returns:
         array (np.array): Regularized covariance matrix
     """
-    assert array.shape[0] == array.shape[1]
-    return (1 - shrink) * array + shrink * np.mean(la.eig(array)[0]) * np.eye(
-        array.shape[0]
-    )
+    nrow = array.shape[0]
+    ncol = array.shape[1]
+    assert nrow == ncol
+    evals = la.eig(array)[0]
+    imag = np.sum(np.abs(np.imag(evals)))
+    if imag < 1e-6:
+        evals = np.real(evals)
+    assert not np.any(
+        np.iscomplex(evals)
+    ), "Cannot regularize matrix because of complex values in cov_regularize."
+    arrayR = (1 - shrink) * array + shrink * np.mean(evals) * np.eye(nrow)
+    return arrayR
 
 
 def sort_evals_evecs(evals, evecs, top=None, descend=True):

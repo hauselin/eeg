@@ -147,32 +147,36 @@ class ged(object):
             covS = utils.cov_singletrial_scale(epochs_s, feature, feature_range)
             covR = utils.cov_singletrial(epochs_r)
 
+        # scale matrices to increase precision (otherwise too small)
+        mult = 1e15
+
         if self.regularize:
-            covR = utils.cov_regularize(covR, shrink=self.regularize)
+            print(f"Applying {self.regularize} regularization.")
+            covR_reg = utils.cov_regularize(covR * mult, shrink=self.regularize)
+        else:
+            covR_reg = covR * mult  # no regularization (simply scale it)
+
+        # perform generalized eigen decomposition
+        evals, evecs = linalg.eig(covS * mult, covR_reg)
+        # regularize to fix imaginary values
+        while np.any(np.iscomplex(evals)) or np.any(np.iscomplex(evecs)):
+            self.regularize += 0.005  # increase by 0.5% each time
+            self.update_params("regularize", self.regularize)
+            print(
+                f"GED returned imaginary eigenvalues. Applying {self.regularize} regularization."
+            )
+            covR_reg = utils.cov_regularize(covR * mult, shrink=self.regularize)
+            evals, evecs = linalg.eig(covS * mult, covR_reg)
+
+        assert (not np.any(np.iscomplex(evals))) and (
+            not np.any(np.iscomplex(evecs))
+        ), "GED returned imaginary eigenvectors after regularization."
+        evals = np.real(evals)
+        evecs = np.real(evecs)
 
         self.covS_ = covS
         self.covR_ = covR
-
-        # perform generalized eigen decomposition
-        evals, evecs = linalg.eig(covS, covR)
-        # regularize to fix imaginary values
-        if np.any(np.iscomplex(evals)) or np.any(np.iscomplex(evecs)):
-            print("GED returned imaginary eigenvalues. Applying 0.01 regularization.")
-            self.regularize = 0.01
-            self.update_params("regularize", self.regularize)
-            covR = utils.cov_regularize(covR, shrink=self.regularize)
-            evals, evecs = linalg.eig(covS, covR)
-            if np.any(np.iscomplex(evals)):
-                raise TypeError(
-                    "GED still returned imaginary eigenvalues after regularization."
-                )
-            if np.any(np.iscomplex(evecs)):
-                raise TypeError(
-                    "GED still returned imaginary eigenvectors after regularization."
-                )
-        assert (not np.any(np.iscomplex(evals))) and (not np.any(np.iscomplex(evecs)))
-        evals = np.real(evals)
-        evecs = np.real(evecs)
+        self.covR_reg = covR_reg / mult
 
         # sort eigenvalues and eigenvectors by descending eigenvalues
         evals, evecs = utils.sort_evals_evecs(evals, evecs)
