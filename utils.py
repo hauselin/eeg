@@ -366,6 +366,7 @@ def plot_tf(
     clim=None,  # tuple (0, 1.0)
     clim_scale=0.7,
     colorbar=True,
+    extent=None,
     ymarks=True,
     xmarks=True,
     cmap="viridis",
@@ -375,13 +376,20 @@ def plot_tf(
     fontsize=16,
     **kwargs,
 ):
-    assert isinstance(data, mne.time_frequency.tfr.AverageTFR)
-    if ylim is not None:
-        data = data.copy().crop(fmin=ylim[0], fmax=ylim[-1])
-    if xlim is not None:
-        data = data.copy().crop(*xlim)
-    dat = data.data[pick]  # select data for channel (np.array)
-    extent = [data.times[0], data.times[-1], data.freqs[0], data.freqs[-1]]
+    if isinstance(data, mne.time_frequency.tfr.AverageTFR):
+        if ylim is not None:
+            data = data.copy().crop(fmin=ylim[0], fmax=ylim[-1])
+        if xlim is not None:
+            data = data.copy().crop(*xlim)
+        dat = data.data[pick]  # select data for channel (np.array)
+        # x and y limits for image
+        if extent is None:
+            extent = [data.times[0], data.times[-1], data.freqs[0], data.freqs[-1]]
+    elif isinstance(data, np.ndarray):
+        dat = data
+        if extent is None:
+            raise ValueError("Provide extent values: [xmin, xmax, ymin, ymax]")
+
     if clim is None:  # set colorbar limits to 0.7 * max value (suggested by Mike)
         maxval = np.max(np.abs(dat))
         clim = (-maxval * clim_scale, maxval * clim_scale)
@@ -660,6 +668,14 @@ def peak_time_val(data, times):
 
 
 def evokeds_to_epoch(evokeds):
+    """Convert a list of evoked objects from different subjects into a single epoch object. Requires evoked.info['subject_info']['his_id'] in each evoked object.
+
+    Args:
+        evokeds (list): List of mne.Evoked objects (evoked or tfr). Each object is the evoked data from one subject. Subject info/id must be provided.
+
+    Returns:
+        mne.EpochsArray or mne.time_frequency.EpochsTFR: epochs object with metadata column 'subject'
+    """
     dat = []
     subj = []
     for e in evokeds:
@@ -667,7 +683,12 @@ def evokeds_to_epoch(evokeds):
         subj.append(e.info["subject_info"]["his_id"])
 
     dat = np.array(dat)
-    epoch = mne.EpochsArray(dat, evokeds[0].info, tmin=evokeds[0].times[0])
+    if len(dat.shape) == 3:
+        epoch = mne.EpochsArray(dat, evokeds[0].info, tmin=evokeds[0].times[0])
+    elif len(dat.shape) == 4:
+        epoch = mne.time_frequency.EpochsTFR(
+            evokeds[0].info, dat, times=evokeds[0].times, freqs=evokeds[0].freqs
+        )
     epoch.metadata = pd.DataFrame(subj, columns=["subject"])
     return epoch
 
@@ -754,7 +775,7 @@ def combine_dict_evokeds(evokeds, grdavg=True):
 
 
 def regress(data, features, return_p=False):
-    """Perform regression for whole multidimensional data space. 
+    """Perform regression on the entire multidimensional data space. 
 
     Args:
         data (numpy.array): Data to perform regression on. First dimension represents observations
@@ -800,6 +821,14 @@ def regress(data, features, return_p=False):
 
 
 def add_intercept(features):
+    """[summary]
+
+    Args:
+        features ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
     assert features.ndim < 3, "`features` must be 1d or 2d array."
     if features.ndim == 1:
         features = np.atleast_2d(features).T
@@ -810,3 +839,60 @@ def add_intercept(features):
         features = np.concatenate([np.ones((n_obs, 1)), features], axis=1)
 
     return features
+
+
+def perform_regression(data, features, return_p=False):
+    """[summary]
+
+    Args:
+        data ([type]): [description]
+        features ([type]): [description]
+        return_p (bool, optional): [description]. Defaults to False.
+
+    Returns:
+        [type]: [description]
+    """
+    evoked = data.average()  # to save results later
+    info = evoked.info
+
+    # prepare data arrrays for regression
+    data_array = data.data
+    features_array = data.metadata[features].to_numpy()
+    coefs, t_vals, stderr, p_vals = regress(data_array, features_array, return_p)
+
+    # save results as evoked objects
+    names = ["intercept"] + features
+    coefs_dict, t_vals_dict, stderr_dict, p_vals_dict = {}, {}, {}, {}
+    for i, n in enumerate(names):
+        e = evoked.copy()
+        dat = coefs[i]
+        assert e.data.shape == dat.shape
+        e.data = dat
+        coefs_dict[n] = e
+
+        e = evoked.copy()
+        dat = t_vals[i]
+        assert e.data.shape == dat.shape
+        e.data = dat
+        t_vals_dict[n] = e
+
+        e = evoked.copy()
+        dat = stderr[i]
+        assert e.data.shape == dat.shape
+        e.data = dat
+        stderr_dict[n] = e
+
+        if return_p:
+            e = evoked.copy()
+            dat = p_vals[i]
+            assert e.data.shape == dat.shape
+            e.data = dat
+            p_vals_dict[n] = e
+
+    return {
+        "coefs": coefs_dict,
+        "t_vals": t_vals_dict,
+        "stderr": stderr_dict,
+        "p_vals": p_vals_dict,
+    }
+

@@ -439,108 +439,108 @@ def load_ged_models(path, subjects):
     return models
 
 
-def plot_ged_results(
-    model,
-    comps2plot=(0, 1, 2, 3, 4, 5),
-    nrows=3,
-    cmap="viridis",
-    path=None,
-    filename=None,
-    figsize=(34, 13),
-    fontsize=15,
-):
-    """[summary]
+# def plot_ged_results(
+#     model,
+#     comps2plot=(0, 1, 2, 3, 4, 5),
+#     nrows=3,
+#     cmap="viridis",
+#     path=None,
+#     filename=None,
+#     figsize=(34, 13),
+#     fontsize=15,
+# ):
+#     """[summary]
 
-    Args:
-        model ([type]): [description]
-        comps2plot (tuple, optional): [description]. Defaults to (0, 1, 2, 3, 4, 5).
-        nrows (int, optional): [description]. Defaults to 3.
-        cmap (str, optional): Colormap. Defaults to "viridis".
-        path ([type], optional): [description]. Defaults to None.
-        filename ([type], optional): [description]. Defaults to None.
-        figsize (tuple, optional): [description]. Defaults to (34, 13).
-        fontsize (int, optional): [description]. Defaults to 15.
+#     Args:
+#         model ([type]): [description]
+#         comps2plot (tuple, optional): [description]. Defaults to (0, 1, 2, 3, 4, 5).
+#         nrows (int, optional): [description]. Defaults to 3.
+#         cmap (str, optional): Colormap. Defaults to "viridis".
+#         path ([type], optional): [description]. Defaults to None.
+#         filename ([type], optional): [description]. Defaults to None.
+#         figsize (tuple, optional): [description]. Defaults to (34, 13).
+#         fontsize (int, optional): [description]. Defaults to 15.
 
-    Returns:
-        Figure, Axes: Instance of matplotlib Figure and Axes
-    """
+#     Returns:
+#         Figure, Axes: Instance of matplotlib Figure and Axes
+#     """
 
-    if isinstance(comps2plot, int) or len(comps2plot) < 3:
-        raise ValueError(
-            "comps2plot must be tuple with length greater than 3, e.g., (0, 1, 2)"
-        )
+#     if isinstance(comps2plot, int) or len(comps2plot) < 3:
+#         raise ValueError(
+#             "comps2plot must be tuple with length greater than 3, e.g., (0, 1, 2)"
+#         )
 
-    fig, ax = plt.subplots(nrows, len(comps2plot), figsize=figsize)
-    # plt.get_current_fig_manager().window.showMaximized()  # maximize figure
+#     fig, ax = plt.subplots(nrows, len(comps2plot), figsize=figsize)
+#     # plt.get_current_fig_manager().window.showMaximized()  # maximize figure
 
-    # plot eigenvalue spectrum/screeplot (top left)
-    cax = ax[0, 0]
-    model.plot_eigenspectrum(cax, cmap=cmap + "_r", n=model.evecs_.shape[0])
+#     # plot eigenvalue spectrum/screeplot (top left)
+#     cax = ax[0, 0]
+#     model.plot_eigenspectrum(cax, cmap=cmap + "_r", n=model.evecs_.shape[0])
 
-    # plot component activation patterns (second row)
-    ax_array = ax[1, :]
-    for idx, cax in enumerate(ax_array):
-        dat2plot = model.get_pattern(comps2plot[idx])
-        utils.topomap(dat2plot, model.get_params("info"), cmap=cmap, axes=cax)
-        utils.colorbar(dat2plot, cax, multiplier=1e10, cmap=cmap)
-        cax.set_title(f"Component {comps2plot[idx]}", size=fontsize)
-        if idx == 0:
-            cax.set(ylabel=f'S win: {model.get_params("win_s")}')
+#     # plot component activation patterns (second row)
+#     ax_array = ax[1, :]
+#     for idx, cax in enumerate(ax_array):
+#         dat2plot = model.get_pattern(comps2plot[idx])
+#         utils.topomap(dat2plot, model.get_params("info"), cmap=cmap, axes=cax)
+#         utils.colorbar(dat2plot, cax, multiplier=1e10, cmap=cmap)
+#         cax.set_title(f"Component {comps2plot[idx]}", size=fontsize)
+#         if idx == 0:
+#             cax.set(ylabel=f'S win: {model.get_params("win_s")}')
 
-    # plot component time series (third row)
-    timewins = []
-    timewins.extend(model.get_params("win_s"))
-    timewins.extend(model.get_params("win_r"))
-    tmin = np.min(timewins)
-    tmax = np.max(timewins)
-    ax_array = ax[2, :]
-    for idx, cax in enumerate(ax_array):
-        dat2plot = model.get_comp(comps2plot[idx])
-        idx2plot = np.where(
-            (dat2plot.get("times") >= tmin) & (dat2plot.get("times") <= tmax)
-        )
-        sns.lineplot(
-            dat2plot.get("times")[idx2plot],
-            dat2plot.get("timeseries")[idx2plot],
-            ax=cax,
-            lw=0.5,
-            color=sns.color_palette(cmap)[0],
-        )
-        cax.ticklabel_format(style="sci", axis="y", scilimits=(0, 0))
-        cax.set_xticks(np.arange(tmin, tmax + 0.01, step=0.2))
-        cax.set(xlabel="Time (s)", ylabel="Component amplitude")
+#     # plot component time series (third row)
+#     timewins = []
+#     timewins.extend(model.get_params("win_s"))
+#     timewins.extend(model.get_params("win_r"))
+#     tmin = np.min(timewins)
+#     tmax = np.max(timewins)
+#     ax_array = ax[2, :]
+#     for idx, cax in enumerate(ax_array):
+#         dat2plot = model.get_comp(comps2plot[idx])
+#         idx2plot = np.where(
+#             (dat2plot.get("times") >= tmin) & (dat2plot.get("times") <= tmax)
+#         )
+#         sns.lineplot(
+#             dat2plot.get("times")[idx2plot],
+#             dat2plot.get("timeseries")[idx2plot],
+#             ax=cax,
+#             lw=0.5,
+#             color=sns.color_palette(cmap)[0],
+#         )
+#         cax.ticklabel_format(style="sci", axis="y", scilimits=(0, 0))
+#         cax.set_xticks(np.arange(tmin, tmax + 0.01, step=0.2))
+#         cax.set(xlabel="Time (s)", ylabel="Component amplitude")
 
-    # plot S window topography (top right)
-    cax = ax[0, -2]
-    utils.topomap(model.Swintopo_, model.get_params("info"), cmap=cmap, axes=cax)
-    cax.set_title(f"EEG S win: {model.get_params('win_s')}", size=fontsize)
-    utils.colorbar(model.Swintopo_, cax, cmap=cmap)
+#     # plot S window topography (top right)
+#     cax = ax[0, -2]
+#     utils.topomap(model.Swintopo_, model.get_params("info"), cmap=cmap, axes=cax)
+#     cax.set_title(f"EEG S win: {model.get_params('win_s')}", size=fontsize)
+#     utils.colorbar(model.Swintopo_, cax, cmap=cmap)
 
-    # plot R window topography
-    cax = ax[0, -1]
-    utils.topomap(model.Rwintopo_, model.get_params("info"), cmap=cmap, axes=cax)
-    utils.colorbar(model.Rwintopo_, cax, cmap=cmap)
-    cax.set_title(f"EEG R win: {model.get_params('win_r')}", size=fontsize)
+#     # plot R window topography
+#     cax = ax[0, -1]
+#     utils.topomap(model.Rwintopo_, model.get_params("info"), cmap=cmap, axes=cax)
+#     utils.colorbar(model.Rwintopo_, cax, cmap=cmap)
+#     cax.set_title(f"EEG R win: {model.get_params('win_r')}", size=fontsize)
 
-    # delete unused axes in first row
-    idx = -3  # start deleting from the -3 axes on the first row
-    while ax[0, idx] is not ax[0, 0]:
-        fig.delaxes(ax[0, idx])
-        idx -= 1
+#     # delete unused axes in first row
+#     idx = -3  # start deleting from the -3 axes on the first row
+#     while ax[0, idx] is not ax[0, 0]:
+#         fig.delaxes(ax[0, idx])
+#         idx -= 1
 
-    fig.suptitle(
-        f"Subject: {model.get_params('info')['subject_info']['his_id']}",
-        fontsize=fontsize,
-    )
-    fig.set_size_inches(figsize[0], figsize[1])
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+#     fig.suptitle(
+#         f"Subject: {model.get_params('info')['subject_info']['his_id']}",
+#         fontsize=fontsize,
+#     )
+#     fig.set_size_inches(figsize[0], figsize[1])
+#     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
-    if filename:
-        if path is None:
-            path = "."
-        fig.savefig(os.path.join(path, filename))
+#     if filename:
+#         if path is None:
+#             path = "."
+#         fig.savefig(os.path.join(path, filename))
 
-    return fig, ax
+#     return fig, ax
 
 
 def transform_pattern(model, data, win=None, singletrial=True, flipsign=False):
@@ -705,3 +705,95 @@ def plot_subj_comp(path, subj, comp_idx):
     a[0].title.set_text(f"{subj}\n" + txt)
     f.tight_layout()
     return f, a, model
+
+
+def plot_all_comps(
+    model,
+    n_comp=None,
+    y_data=None,
+    figsize=None,
+    fontsize=10,
+    cmap="viridis",
+    tmin=None,
+    tmax=None,
+):
+
+    if y_data is not None:
+        assert (
+            model.comp_timeseries_.shape == y_data.shape
+        ), "y_data must have same dimensions as GED component time series"
+        model = copy.deepcopy(model)
+        model.comp_timeseries_ = y_data
+
+    # determine no. of components to plot
+    max_n_comp = model.comp_pattern_.shape[0]
+    if n_comp is None:
+        n_comp = max_n_comp
+    else:
+        n_comp = np.min([max_n_comp, n_comp])
+
+    # determine figure size and subplot
+    # +2 for eigenspectrum (2 subplots) & Swin Rwin (2 subplots)
+    n_row, n_col = utils.subplotgrid(n_comp + 2)
+    n_col *= 2
+    fig, ax = plt.subplots(n_row, n_col, figsize=figsize)
+
+    print(f"Plotting {n_comp} components. May take some time...")
+    ax = ax.ravel()  # flatten axes
+    i = 0
+
+    # plot eigenspectrum
+    evals = model.get_top(n_comp).get("evals")
+    sns.scatterplot(np.arange(evals.shape[0]), evals, ax=ax[i], palette=cmap, hue=evals)
+    ax[i].legend_.remove()
+    i += 1
+
+    # plot Swin
+    utils.topomap(model.Swintopo_, model.get_params("info"), cmap=cmap, axes=ax[i])
+    utils.colorbar(model.Swintopo_, ax[i], cmap=cmap)
+    ax[i].set_title(f"EEG S win: {model.get_params('win_s')}", size=fontsize)
+    i += 1
+
+    # plot Rwin
+    utils.topomap(model.Rwintopo_, model.get_params("info"), cmap=cmap, axes=ax[i])
+    utils.colorbar(model.Rwintopo_, ax[i], cmap=cmap)
+    ax[i].set_title(f"EEG R win: {model.get_params('win_r')}", size=fontsize)
+    i += 1
+
+    # remove subplot
+    fig.delaxes(ax[i])
+    i += 1
+
+    # plot components
+    for c in range(n_comp):
+        # plot topography
+        dat2plot = model.get_pattern(c)
+        utils.topomap(dat2plot, model.get_params("info"), cmap=cmap, axes=ax[i])
+        utils.colorbar(dat2plot, ax[i], multiplier=1e10, cmap=cmap)
+        ax[i].set_title(f"Component {c}\n{model.get_params('win_s')}", size=fontsize)
+        i += 1
+
+        # plot time series
+        dat2plot = model.get_comp(c)
+        temp_x = dat2plot.get("times")
+        temp_y = dat2plot.get("timeseries")
+        if tmin is None:
+            tmin = temp_x[0]
+        if tmax is None:
+            tmax = temp_x[-1]
+        idx2plot = np.where((temp_x >= tmin) & (temp_x <= tmax))
+        ax[i].plot(temp_x[idx2plot], temp_y[idx2plot], color="black")
+        ax[i].axvline(color="gray")
+        ax[i].axhline(color="gray")
+        i += 1
+
+    # delete unused subplots
+    for sp in range(i, len(ax)):
+        fig.delaxes(ax[sp])
+
+    fig.suptitle(f"{model.info['subject_info']['his_id']}", fontsize=fontsize * 1.5)
+    print("Finished plotting.")
+    fig.tight_layout()
+
+    return fig, ax
+
