@@ -904,3 +904,20 @@ def perform_regression(data, features, return_p=False):
         "p_vals": p_vals_dict,
     }
 
+
+def sort_evoked(evoked):
+    """Sort channels in an evoked object by mean activity. Generally used for visualizing beta or t-value time-series of components.
+
+    Args:
+        evoked (mne.Evoked): mne.Evoked object
+
+    Returns:
+        tuple: list of sorted indices and an mne.Evoked object with sorted data
+    """
+    data = evoked.copy().data
+    data_mean = data.mean(axis=1)
+    idx = np.argsort(data_mean)
+    data_sorted = data[idx]
+    evoked_sorted = evoked.copy()
+    evoked_sorted.data = data_sorted
+    return list(idx), evoked_sorted
