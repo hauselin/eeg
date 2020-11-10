@@ -524,6 +524,11 @@ def get_subject_comp_idx(subjects_dict, key):
     return out
 
 
+def get_subject_comp_idx_from_df(df, subjects, col):
+    idx = df["subject"].isin(subjects)
+    return df.loc[idx, col].tolist()
+
+
 def rename_chan(data, new_name="Fp1"):
     assert len(data.info.ch_names) == 1
     old_name = data.info.ch_names[0]

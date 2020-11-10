@@ -346,11 +346,14 @@ class ged(object):
         sns.despine(fig=plt.gcf(), ax=axes)
         return axes
 
-    def plot_component(self, n=0, tmin=None, tmax=None, cmap="viridis", **kwargs):
+    def plot_component(
+        self, n=0, flip=False, tmin=None, tmax=None, cmap="viridis", **kwargs
+    ):
         """[summary]
 
         Args:
             n (int, optional): [description]. Defaults to 0.
+            flip (bool, optional): [description]. Defaults to False.
             tmin ([type], optional): [description]. Defaults to None.
             tmax ([type], optional): [description]. Defaults to None.
             cmap (str, optional): [description]. Defaults to "viridis".
@@ -360,6 +363,8 @@ class ged(object):
         """
         fig, axes = plt.subplots(2, 1)
         dat2plot = self.get_pattern(n)
+        if flip:
+            dat2plot *= -1
         # plot activation pattern
         utils.topomap(dat2plot, self.get_params("info"), cmap=cmap, axes=axes[0])
         utils.colorbar(dat2plot, axes[0], multiplier=1e10, cmap=cmap)
@@ -375,9 +380,12 @@ class ged(object):
         idx2plot = np.where(
             (dat2plot.get("times") >= tmin) & (dat2plot.get("times") <= tmax)
         )
+        ts = dat2plot.get("timeseries")
+        if flip:
+            ts = dat2plot.get("timeseries") * -1
         sns.lineplot(
             dat2plot.get("times")[idx2plot],
-            dat2plot.get("timeseries")[idx2plot],
+            ts[idx2plot],
             ax=axes[1],
             lw=1,
             color=sns.color_palette(cmap)[0],
@@ -429,6 +437,7 @@ def load_ged_models(path, subjects):
 
     Args:
         path (str): Location/path of all models (.npz files).
+        subjects (list): List of subject ids or file names.
 
     Returns:
         list: list containing all models
@@ -436,7 +445,7 @@ def load_ged_models(path, subjects):
     models = []
     for s in subjects:
         fname = glob.glob(os.path.join(path, f"*{s}*.npz"))[0]
-        fname = fname[(len(path) + 1) :]
+        fname = fname[(len(path)) :]  # weird.. might break...
         print(f"Loading {fname}")
         m = load_ged_model(path, fname)
         models.append(m)
@@ -630,7 +639,7 @@ def transform_timeseries(model, data, win=None, singletrial=True, flipsign=False
     return result
 
 
-def select_comp(models, comps_idx):
+def select_comp(models, comps_idx, pattern_tmin=None):
     """Select components for different subjects. For each ged instance in models, select the corresponding component in comps_idx. For exampmle, if [ged1, ged2, ged3] and [0, 2, 1], select components 0, 2, 1 from ged1, ged2, and ged respectively. 
 
     Args:
@@ -654,7 +663,7 @@ def select_comp(models, comps_idx):
 
     info_ts = mne.create_info(ch_names=["C1"], sfreq=inf["sfreq"], ch_types=["eeg"])
     info_pat = inf
-    for i, m in enumerate(models):
+    for i, m in enumerate(models):  # for each subject/model
         temp_comp = m.get_comp(comps_idx[i])
         temp_times = temp_comp["times"]
         temp_ts = temp_comp["timeseries"].reshape(1, -1)
@@ -672,10 +681,13 @@ def select_comp(models, comps_idx):
 
         # pattern in evoked array
         temp_pat = temp_comp["pattern"].reshape(-1, 1)
+        pat_tmin = np.mean(m.get_params("win_s"))
+        if pattern_tmin is not None:
+            pat_tmin = pattern_tmin
         e_pat = mne.EvokedArray(
             temp_pat,
             info=info_pat,
-            tmin=np.mean(m.get_params("win_s")),
+            tmin=pat_tmin,
             comment=f"Comp {comps_idx[i]} Swin: {m.get_params('win_s')}",
             nave=1,
         )
