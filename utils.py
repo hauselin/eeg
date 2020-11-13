@@ -20,18 +20,18 @@ from sklearn.preprocessing import minmax_scale
 
 
 def read_data(subject, path, ext):
-    """Find and read EEGLAB EEG epoched data structure from MATLAB.
+    """Find and read EEGLAB EEG epoched data structure from MATLAB with mne.io.read_epochs_eeglab. 
 
     Args:
         subject (str): subject id
-        path (str): directory to look for data
-        ext (str): file extension (usually .mat)
+        path (str): directory to read data from
+        ext (str): file extension (usually .mat file; .set file also works)
 
     Raises:
         ValueError: If glob finds less or more than 1 matching files.
 
     Returns:
-        mne.io.eeglab.eeglab.EpochsEEGLAB: mne.Epochs instance
+        tuple: mne.io.eeglab.eeglab.EpochsEEGLAB mne.Epochs instance and filepath.
     """
     source = glob.glob(os.path.join(path, f"*{subject}*{ext}"))
     if len(source) == 1:
@@ -39,6 +39,8 @@ def read_data(subject, path, ext):
         print(f"Processing subject {subject}")
         data = mne.io.read_epochs_eeglab(source[0])
         data._data = data._data.astype(np.float64)  # ensure correct type
+        data.info["subject_info"] = {}
+        data.info["subject_info"]["his_id"] = subject
         return data, source[0]
     else:
         raise ValueError(f"Check source! Found {len(source)} matching files.")
@@ -54,7 +56,7 @@ def read_metadata_from_csv(subject, path):
         ValueError: If glob finds less or more than 1 matching files.
 
     Returns:
-        pandas.DataFrame: pandas.DataFrame instance
+        tuple: pandas.DataFrame instance and filepath.
     """
     source = glob.glob(os.path.join(path, f"*{subject}*.csv"))
     if len(source) == 1:
@@ -71,7 +73,7 @@ def split_odd_even(epochs):
         epochs (mne.Epochs): mne.Epochs instance
 
     Returns:
-        mne.Epochs: two mne.Epochs instances.
+        mne.Epochs: two mne.Epochs instances (ood, even).
     """
     return epochs[::2], epochs[1::2]
 
@@ -85,7 +87,7 @@ def cov_singletrial(epochs, win=None, ch_names=None):
         ch_names (tuple, optional): Channels to subset. Defaults to None.
 
     Returns:
-        An array object: channel by channel covariance  
+        array (numpy.array): channel by channel covariance matrix/array
     """
     assert len(epochs.get_data().shape) == 3
 
@@ -113,7 +115,7 @@ def cov_avg(x, win=None, ch_names=None):
         ch_names (list, optional): Channels to subset. Defaults to None.
 
     Returns:
-        An array object: channel by channel covariance  
+        array (numpy.array): channel by channel covariance matrix/array
     """
     if win is None:
         win = [x.times[0], x.times[-1]]
@@ -136,20 +138,22 @@ def cov_avg(x, win=None, ch_names=None):
 def cov_singletrial_scale(
     epochs, feature, feature_range=(1, 2), win=None, ch_names=None
 ):
-    """[summary]
+    """Scale each epoch in mne's epoch instance by a feature's value. The epoch object must have metadata attribute.
 
     Args:
-        epochs ([type]): [description]
-        feature ([type]): [description]
-        feature_range (tuple, optional): [description]. Defaults to (1, 2).
-        win ([type], optional): [description]. Defaults to None.
-        ch_names ([type], optional): [description]. Defaults to None.
+        epochs (mne.Epochs): mne epoched instance.
+        feature (str): Column/feature name of feature.
+        feature_range (tuple, optional): Min/max value to scale feature to. Defaults to (1, 2).
+        win (list, optional): Time window to subset or crop. Defaults to None.
+        ch_names (list, optional): Channels to subset. Defaults to None.
 
     Returns:
-        [type]: [description]
+        array (numpy.array): channel by channel covariance matrix/array
     """
+    assert epochs.metadata is not None, "No metadata!"
+
     regressor = minmax_scale(epochs.metadata[feature], feature_range=feature_range)
-    assert regressor.shape[0] == len(epochs)
+    assert regressor.shape[0] == len(epochs), "Check feature and epochs dimensions!"
 
     if win is None:
         win = [epochs.times[0], epochs.times[-1]]
@@ -191,16 +195,16 @@ def cov_regularize(array, shrink=0.00):
 
 
 def sort_evals_evecs(evals, evecs, top=None, descend=True):
-    """[summary]
+    """Sort eigenvalues (evals) and eigenvalues (evecs) based on eigenvalues. 
 
     Args:
-        evals ([type]): [description]
-        evecs ([type]): [description]
-        top ([type], optional): [description]. Defaults to None.
-        descend (bool, optional): [description]. Defaults to True.
+        evals (numpy.array): array of eigenvalues
+        evecs (numpy.array): array of eigenvectors
+        top (int, optional): Top (number of) evals and evecs to return. Defaults to None (all).
+        descend (bool, optional): Order to sort by. Defaults to True (largest evals to smallest evals).
 
     Returns:
-        [type]: [description]
+        sorted evals and evecs (tuple): Sorted eigenvalues and eigenvectors.
     """
     if descend:
         idx = evals.argsort()[::-1]
@@ -236,10 +240,10 @@ def load_mxc_data():
 
 
 def load_mxc_lf():
-    """[summary]
+    """Load leadfield matrix or forward model by Mike X Cohen. 
 
     Returns:
-        [type]: [description]
+        dictionary: Dictionary with values that can be used to simulate EEG data using with a forward model.
     """
     try:
         path = os.path.join(os.path.dirname(__file__), "data", "leadfield.npy")
@@ -526,7 +530,7 @@ def get_subject_comp_idx(subjects_dict, key):
 
 def get_subject_comp_idx_from_df(df, subjects, col):
     idx = df["subject"].isin(subjects)
-    return df.loc[idx, col].tolist()
+    return df.loc[idx, col].astype(int).tolist()
 
 
 def rename_chan(data, new_name="Fp1"):
@@ -558,7 +562,7 @@ def avg_time(data, trange):
     return dat
 
 
-def epochs_to_pd(epochs, metadata=True, concat=True):
+def epochs_to_pd(epochs, metadata=True, concat=True, decimate=4):
     """Save values from each epoch to pandas.DataFrame.
 
     Args:
@@ -571,15 +575,23 @@ def epochs_to_pd(epochs, metadata=True, concat=True):
     """
     df_all = []
     for e in epochs:
-        df = e.copy().to_data_frame(time_format=None, long_format=True)
+        df = (
+            e.copy()
+            .decimate(decimate)
+            .to_data_frame(time_format=None, long_format=True)
+        )
+        df["epoch"] = df["epoch"].astype(int)
         del df["condition"]
         if metadata:
+            epoch_numbers = df["epoch"].unique().astype(int)
+            epoch_numbers.sort()
+            assert len(epoch_numbers) == len(e), "Epoch lengths don't match."
             md = e.metadata
-            md["epoch"] = np.arange(len(e))
+            md["epoch"] = epoch_numbers
             df = pd.merge(df, md, how="left", on="epoch")
-        else:
-            df["subject"] = e.info["subject_info"]["his_id"]
+        df["subject"] = e.info["subject_info"]["his_id"]
         df_all.append(df)
+
     if concat:
         df_all = pd.concat(df_all, ignore_index=True)
     return df_all

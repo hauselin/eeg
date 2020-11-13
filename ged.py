@@ -432,7 +432,7 @@ def load_ged_model(path=".", filename="_unnamed_model.npz"):
     return model
 
 
-def load_ged_models(path, subjects):
+def load_ged_models(path, subjects, string=""):
     """Load all ged models in .npz files in path/directory.
 
     Args:
@@ -444,7 +444,7 @@ def load_ged_models(path, subjects):
     """
     models = []
     for s in subjects:
-        fname = glob.glob(os.path.join(path, f"*{s}*.npz"))[0]
+        fname = glob.glob(os.path.join(path, f"*{s}*{string}*.npz"))[0]
         fname = fname[(len(path)) :]  # weird.. might break...
         print(f"Loading {fname}")
         m = load_ged_model(path, fname)
