@@ -567,7 +567,7 @@ def epochs_to_pd(epochs, metadata=True, concat=True, decimate=4):
 
     Args:
         epochs (list): List containing mne epoch objects.
-        metadata (bool, optional): Whether to . Defaults to True.
+        metadata (bool, optional): Whether to add metadata to resulting dataframe. Defaults to True.
         concat (bool, optional): . Defaults to True.
 
     Returns:
@@ -589,11 +589,12 @@ def epochs_to_pd(epochs, metadata=True, concat=True, decimate=4):
             md = e.metadata
             md["epoch"] = epoch_numbers
             df = pd.merge(df, md, how="left", on="epoch")
-        df["subject"] = e.info["subject_info"]["his_id"]
+
         df_all.append(df)
 
     if concat:
         df_all = pd.concat(df_all, ignore_index=True)
+
     return df_all
 
 
@@ -923,7 +924,7 @@ def perform_regression(data, features, return_p=False):
 
 
 def sort_evoked(evoked):
-    """Sort channels in an evoked object by mean activity. Generally used for visualizing beta or t-value time-series of components.
+    """Sort channels in an evoked object by mean activity. Generally used for visualizing sorted beta or t-value time-series of components.
 
     Args:
         evoked (mne.Evoked): mne.Evoked object
@@ -938,3 +939,20 @@ def sort_evoked(evoked):
     evoked_sorted = evoked.copy()
     evoked_sorted.data = data_sorted
     return list(idx), evoked_sorted
+
+
+def mad(x):
+    return np.nanmedian(abs(x - np.nanmedian(x))) * 1.4826
+
+
+def mad_deviation(x):
+    return (x - np.nanmedian(x)) / mad(x)
+
+
+def outliers_mad(x, threshold=3.0):
+    deviation = mad_deviation(x)
+    x_clean = np.array(x, dtype=np.float_)
+    filt = np.abs(deviation) >= threshold
+    x_clean[filt] = np.nan
+    print(f"Removed {np.sum(filt)} outliers. Threshold = {threshold}")
+    return x_clean

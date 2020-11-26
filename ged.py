@@ -429,6 +429,7 @@ def load_ged_model(path=".", filename="_unnamed_model.npz"):
     infile = os.path.join(path, filename)
     x = np.load(infile, allow_pickle=True)
     model = x["model"].item()
+    print(f"Loaded {infile}")
     return model
 
 
@@ -438,6 +439,7 @@ def load_ged_models(path, subjects, string=""):
     Args:
         path (str): Location/path of all models (.npz files).
         subjects (list): List of subject ids or file names.
+        string (str): string to match in filenames. Defaults to "".
 
     Returns:
         list: list containing all models
@@ -446,6 +448,8 @@ def load_ged_models(path, subjects, string=""):
     for s in subjects:
         fname = glob.glob(os.path.join(path, f"*{s}*{string}*.npz"))[0]
         fname = fname[(len(path)) :]  # weird.. might break...
+        if fname[0] == "/":
+            fname = fname[1:]
         print(f"Loading {fname}")
         m = load_ged_model(path, fname)
         models.append(m)
